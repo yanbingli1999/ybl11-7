@@ -9,7 +9,9 @@ export type TileType =
   | 'trap'
   | 'relic'
   | 'torch'
-  | 'chest';
+  | 'chest'
+  | 'hiddenPassage'
+  | 'floodable';
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
@@ -28,6 +30,7 @@ export interface Tile {
   trapType?: string;
   relicId?: string;
   torchFuel?: number;
+  floodLevel?: number;
 }
 
 export interface Mechanism {
@@ -106,6 +109,14 @@ export interface InventoryItem {
   appraised: boolean;
 }
 
+export interface TideState {
+  level: number;
+  maxLevel: number;
+  turnsPerChange: number;
+  turnsSinceLastChange: number;
+  direction: 'rising' | 'falling';
+}
+
 export interface GameState {
   player: PlayerState;
   room: RoomState;
@@ -113,6 +124,12 @@ export interface GameState {
   turn: number;
   message: string;
   escapeValue: number;
+  tide: TideState;
+}
+
+export interface HiddenPassage {
+  position: Position;
+  revealAtLevel: number;
 }
 
 export interface RoomTemplate {
@@ -126,6 +143,7 @@ export interface RoomTemplate {
   traps: TrapInstance[];
   relics: RelicInstance[];
   torches: Position[];
+  hiddenPassages: HiddenPassage[];
 }
 
 export interface RoomState {
@@ -140,6 +158,7 @@ export interface RoomState {
   torches: { position: Position; fuel: number }[];
   entrance: Position;
   exit: Position;
+  hiddenPassages: HiddenPassage[];
 }
 
 export interface ExpeditionRecord {

@@ -1,4 +1,4 @@
-import { RoomTemplate, TileType, Position, DoorInstance } from '../types/game';
+import { RoomTemplate, TileType, Position, DoorInstance, HiddenPassage } from '../types/game';
 
 function createEmptyRoom(width: number, height: number): TileType[][] {
   const tiles: TileType[][] = [];
@@ -143,6 +143,37 @@ export function generateRoomTemplate(depth: number): RoomTemplate {
     }
   }
 
+  const floodableCount = 2 + Math.floor(Math.random() * 3) + Math.floor(depth / 2);
+  for (let i = 0; i < floodableCount; i++) {
+    const x = 2 + Math.floor(Math.random() * (width - 4));
+    const y = 1 + Math.floor(Math.random() * (height - 2));
+    if (
+      tiles[y][x] === 'floor' &&
+      !(x === entrance.x && y === entrance.y) &&
+      !(x === exit.x && y === exit.y)
+    ) {
+      tiles[y][x] = 'floodable';
+    }
+  }
+
+  const hiddenPassages: HiddenPassage[] = [];
+  const passageCount = 1 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < passageCount; i++) {
+    const x = 1 + Math.floor(Math.random() * (width - 2));
+    const y = 1 + Math.floor(Math.random() * (height - 2));
+    if (
+      tiles[y][x] === 'wall' &&
+      !(x === entrance.x && y === entrance.y) &&
+      !(x === exit.x && y === exit.y)
+    ) {
+      tiles[y][x] = 'hiddenPassage';
+      hiddenPassages.push({
+        position: { x, y },
+        revealAtLevel: Math.floor(Math.random() * 2),
+      });
+    }
+  }
+
   return {
     id: `room_depth_${depth}_${Date.now()}`,
     name: `第 ${depth} 层遗迹`,
@@ -154,6 +185,7 @@ export function generateRoomTemplate(depth: number): RoomTemplate {
     traps,
     relics,
     torches,
+    hiddenPassages,
   };
 }
 
@@ -164,13 +196,13 @@ export const TUTORIAL_ROOM: RoomTemplate = {
   height: 9,
   tiles: [
     ['wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall'],
-    ['wall', 'entrance', 'floor', 'floor', 'floor', 'wall', 'wall', 'floor', 'floor', 'floor', 'exit', 'wall'],
-    ['wall', 'floor', 'floor', 'stone', 'floor', 'wall', 'wall', 'floor', 'relic', 'floor', 'floor', 'wall'],
-    ['wall', 'floor', 'floor', 'floor', 'floor', 'door', 'door', 'floor', 'floor', 'floor', 'floor', 'wall'],
-    ['wall', 'floor', 'floor', 'floor', 'floor', 'wall', 'wall', 'floor', 'floor', 'floor', 'floor', 'wall'],
+    ['wall', 'entrance', 'floor', 'floodable', 'floor', 'wall', 'wall', 'floor', 'floor', 'floor', 'exit', 'wall'],
+    ['wall', 'floor', 'floor', 'stone', 'floor', 'wall', 'wall', 'floor', 'relic', 'floodable', 'floor', 'wall'],
+    ['wall', 'floor', 'hiddenPassage', 'floor', 'floor', 'door', 'door', 'floor', 'floor', 'floor', 'floor', 'wall'],
+    ['wall', 'floodable', 'floor', 'floor', 'floor', 'wall', 'wall', 'floor', 'floor', 'floor', 'floodable', 'wall'],
     ['wall', 'floor', 'pressurePlate', 'floor', 'floor', 'wall', 'wall', 'floor', 'pressurePlate', 'floor', 'floor', 'wall'],
-    ['wall', 'floor', 'floor', 'floor', 'floor', 'wall', 'wall', 'floor', 'floor', 'floor', 'floor', 'wall'],
-    ['wall', 'floor', 'floor', 'floor', 'floor', 'wall', 'wall', 'floor', 'trap', 'floor', 'floor', 'wall'],
+    ['wall', 'floor', 'floor', 'floor', 'floodable', 'wall', 'wall', 'floor', 'floor', 'floor', 'floor', 'wall'],
+    ['wall', 'floor', 'floor', 'floor', 'floor', 'wall', 'wall', 'floor', 'trap', 'floodable', 'floor', 'wall'],
     ['wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall', 'wall'],
   ],
   mechanisms: [
@@ -219,5 +251,11 @@ export const TUTORIAL_ROOM: RoomTemplate = {
   torches: [
     { x: 0, y: 1 },
     { x: 11, y: 1 },
+  ],
+  hiddenPassages: [
+    {
+      position: { x: 2, y: 3 },
+      revealAtLevel: 1,
+    },
   ],
 };

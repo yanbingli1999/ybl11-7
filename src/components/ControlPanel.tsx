@@ -167,6 +167,10 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
         <div>• 推石头到机关上开门</div>
         <div>• 小心陷阱和诅咒</div>
         <div>• 见好就收，及时撤离</div>
+        <div>• 🌊注意潮汐水位变化</div>
+        <div>• 低水位可走暗道🕳️</div>
+        <div>• 高水位陷阱被淹但火把减弱</div>
+        <div>• 携带重物涉水额外耗体力</div>
       </div>
     </div>
   );

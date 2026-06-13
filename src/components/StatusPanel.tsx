@@ -1,10 +1,12 @@
 import React from 'react';
-import { PlayerState } from '../types/game';
+import { PlayerState, TideState } from '../types/game';
+import { getTideEffectDescription } from '../engine/gameEngine';
 
 interface StatusPanelProps {
   player: PlayerState;
   turn: number;
   status: string;
+  tide: TideState;
 }
 
 const StatBar: React.FC<{
@@ -58,6 +60,7 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({
   player,
   turn,
   status,
+  tide,
 }) => {
   const statusText: Record<string, string> = {
     exploring: '🔍 探索中',
@@ -144,6 +147,35 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({
         </div>
         <div>
           💰 金币: <strong>{player.gold}</strong>
+        </div>
+      </div>
+
+      <div
+        style={{
+          marginTop: '16px',
+          padding: '10px',
+          backgroundColor: '#1a2a3e',
+          borderRadius: '6px',
+          fontSize: '12px',
+          border: '1px solid #3a5a7a',
+        }}
+      >
+        <div style={{ color: '#88aaff', marginBottom: '6px', fontWeight: 'bold' }}>
+          🌊 潮汐机关
+        </div>
+        <StatBar
+          label="水位"
+          value={tide.level}
+          max={tide.maxLevel}
+          color="#4488cc"
+          icon="🌊"
+        />
+        <div style={{ fontSize: '11px', color: '#aaa', marginTop: '4px' }}>
+          {tide.direction === 'rising' ? '🔺 涨潮中' : '🔻 退潮中'}
+          {' · '}{tide.turnsPerChange - tide.turnsSinceLastChange}回合后变化
+        </div>
+        <div style={{ fontSize: '11px', color: '#88aacc', marginTop: '4px' }}>
+          {getTideEffectDescription(tide)}
         </div>
       </div>
     </div>

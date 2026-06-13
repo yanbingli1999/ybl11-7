@@ -6,6 +6,7 @@ import {
   Position,
   Tile,
   InventoryItem,
+  TideState,
 } from '../types/game';
 import { generateRoomTemplate, TUTORIAL_ROOM } from '../data/rooms';
 import { getRandomRelic, RELICS } from '../data/relics';
@@ -38,6 +39,7 @@ function createRoomState(depth: number): RoomState {
       visible: false,
       lit: false,
       explored: false,
+      floodLevel: type === 'floodable' ? 0 : undefined,
     }))
   );
 
@@ -92,6 +94,8 @@ function createRoomState(depth: number): RoomState {
     }
   }
 
+  const hiddenPassages = template.hiddenPassages.map((hp) => ({ ...hp }));
+
   return {
     templateId: template.id,
     width: template.width,
@@ -104,6 +108,7 @@ function createRoomState(depth: number): RoomState {
     torches,
     entrance,
     exit,
+    hiddenPassages,
   };
 }
 
@@ -113,20 +118,31 @@ export function createInitialGame(): GameState {
 
   player.position = { ...room.entrance };
 
+  const tide = createTideState(1);
+
   const game: GameState = {
     player,
     room,
     status: 'exploring',
     turn: 0,
-    message: '欢迎来到遗迹！方向键/WASD移动，空格互动。提示：推石头🪨到机关🔘上开门🔒',
+    message: '欢迎来到遗迹！方向键/WASD移动，空格互动。提示：推石头🪨到机关🔘上开门🔒 | 注意潮汐🌊水位变化！',
     escapeValue: 0,
+    tide,
   };
 
+  applyTideEffects(game);
   updateVisibility(game);
   return game;
 }
 
 export function createGameFromSaved(saved: GameState): GameState {
+  if (!saved.tide) {
+    saved.tide = createTideState(saved.player.depth);
+  }
+  if (!saved.room.hiddenPassages) {
+    saved.room.hiddenPassages = [];
+  }
+  applyTideEffects(saved);
   updateVisibility(saved);
   return saved;
 }
@@ -167,6 +183,16 @@ export function movePlayer(game: GameState, direction: Direction): GameState {
 
   if (targetTile.type === 'wall') {
     return newGame;
+  }
+
+  if (targetTile.type === 'hiddenPassage') {
+    const passage = newGame.room.hiddenPassages.find(
+      (hp) => hp.position.x === newPos.x && hp.position.y === newPos.y
+    );
+    const canReveal = passage && newGame.tide.level <= passage.revealAtLevel;
+    if (!canReveal) {
+      return newGame;
+    }
   }
 
   if (targetTile.type === 'door') {
@@ -248,9 +274,25 @@ export function movePlayer(game: GameState, direction: Direction): GameState {
   }
 
   newGame.player.position = newPos;
-  newGame.player.stamina -= 1;
+
+  let staminaCost = 1;
+
+  const isFlooded = targetTile.floodLevel !== undefined && targetTile.floodLevel! > 0;
+  if (isFlooded) {
+    const wadeCost = targetTile.floodLevel!;
+    const heavyWeight = newGame.player.inventory.reduce((sum, item) => sum + item.weight, 0);
+    const extraCost = heavyWeight > 5 ? Math.ceil(heavyWeight / 5) : 0;
+    staminaCost += wadeCost + extraCost;
+
+    if (extraCost > 0) {
+      newGame.message = `🌊 涉水前进，负重${heavyWeight}额外消耗${extraCost}体力！`;
+    }
+  }
+
+  newGame.player.stamina -= staminaCost;
   newGame.turn += 1;
 
+  processTide(newGame);
   checkTrap(newGame);
   checkRelic(newGame);
   checkEntranceExit(newGame);
@@ -291,6 +333,12 @@ function openLinkedDoor(game: GameState, doorId: string) {
 
 function checkTrap(game: GameState) {
   const { x, y } = game.player.position;
+  const tile = game.room.tiles[y][x];
+
+  if (tile.floodLevel !== undefined && tile.floodLevel! >= 2) {
+    return;
+  }
+
   const trap = game.room.traps.find(
     (t) => t.position.x === x && t.position.y === y && !t.triggered
   );
@@ -393,18 +441,19 @@ export function calculateEscapeValue(game: GameState): number {
 
 export function updateVisibility(game: GameState) {
   const { x: px, y: py } = game.player.position;
-  const brightness = game.player.brightness;
+  const tidePenalty = game.tide ? Math.floor(game.tide.level / 2) : 0;
+  const effectiveBrightness = Math.max(1, game.player.brightness - tidePenalty);
 
   for (let y = 0; y < game.room.height; y++) {
     for (let x = 0; x < game.room.width; x++) {
       const distance = Math.sqrt(Math.pow(x - px, 2) + Math.pow(y - py, 2));
       const tile = game.room.tiles[y][x];
 
-      if (distance <= brightness) {
+      if (distance <= effectiveBrightness) {
         tile.visible = true;
         tile.lit = true;
         tile.explored = true;
-      } else if (distance <= brightness + 1) {
+      } else if (distance <= effectiveBrightness + 1) {
         tile.visible = true;
         tile.lit = false;
         tile.explored = true;
@@ -419,7 +468,8 @@ export function updateVisibility(game: GameState) {
     if (torch.fuel > 0) {
       const torchX = torch.position.x;
       const torchY = torch.position.y;
-      const torchRadius = 2;
+      const tideTorchPenalty = game.tide ? Math.floor(game.tide.level / 2) : 0;
+      const torchRadius = Math.max(1, 2 - tideTorchPenalty);
 
       for (let y = 0; y < game.room.height; y++) {
         for (let x = 0; x < game.room.width; x++) {
@@ -434,7 +484,7 @@ export function updateVisibility(game: GameState) {
             const playerDist = Math.sqrt(
               Math.pow(x - px, 2) + Math.pow(y - py, 2)
             );
-            if (playerDist <= brightness + 2) {
+            if (playerDist <= effectiveBrightness + 2) {
               tile.visible = true;
             }
           }
@@ -466,7 +516,10 @@ export function nextFloor(game: GameState): GameState {
     newGame.player.stamina + 20
   );
 
-  newGame.message = `进入第 ${newGame.player.depth} 层！体力恢复了一些。`;
+  newGame.tide = createTideState(newGame.player.depth);
+  applyTideEffects(newGame);
+
+  newGame.message = `进入第 ${newGame.player.depth} 层！体力恢复了一些。🌊 潮汐水位: ${getTideDescription(newGame.tide.level)}`;
   newGame.turn += 1;
 
   updateVisibility(newGame);
@@ -680,6 +733,10 @@ export function rest(game: GameState): GameState {
   );
   newGame.turn += 3;
 
+  for (let i = 0; i < 3; i++) {
+    processTide(newGame);
+  }
+
   if (Math.random() < 0.1) {
     newGame.player.curse += 5;
     newGame.message = '休息时感到一股寒意...诅咒增加了5点。';
@@ -687,5 +744,94 @@ export function rest(game: GameState): GameState {
     newGame.message = '休息片刻，恢复了20点体力。';
   }
 
+  updateVisibility(newGame);
   return newGame;
+}
+
+function createTideState(depth: number): TideState {
+  return {
+    level: Math.floor(Math.random() * 3),
+    maxLevel: 4,
+    turnsPerChange: Math.max(3, 6 - Math.floor(depth / 3)),
+    turnsSinceLastChange: 0,
+    direction: Math.random() < 0.5 ? 'rising' : 'falling',
+  };
+}
+
+function getTideDescription(level: number): string {
+  const descriptions = ['干涸', '浅水', '中水位', '高水位', '洪泛'];
+  return descriptions[Math.min(level, 4)] || '未知';
+}
+
+export function getTideEffectDescription(tide: TideState): string {
+  const parts: string[] = [];
+  parts.push(`水位${getTideDescription(tide.level)}(${tide.level}/${tide.maxLevel})`);
+  parts.push(tide.direction === 'rising' ? '涨潮中' : '退潮中');
+
+  if (tide.level <= 1) {
+    parts.push('低水位-暗道可能露出');
+  }
+  if (tide.level >= 2) {
+    parts.push('高水位-陷阱被淹没');
+  }
+  if (tide.level >= 3) {
+    parts.push('火把效果降低');
+  }
+
+  return parts.join(' | ');
+}
+
+function processTide(game: GameState) {
+  if (!game.tide) return;
+
+  game.tide.turnsSinceLastChange += 1;
+
+  if (game.tide.turnsSinceLastChange >= game.tide.turnsPerChange) {
+    game.tide.turnsSinceLastChange = 0;
+
+    if (game.tide.direction === 'rising') {
+      game.tide.level += 1;
+      if (game.tide.level >= game.tide.maxLevel) {
+        game.tide.level = game.tide.maxLevel;
+        game.tide.direction = 'falling';
+      }
+    } else {
+      game.tide.level -= 1;
+      if (game.tide.level <= 0) {
+        game.tide.level = 0;
+        game.tide.direction = 'rising';
+      }
+    }
+
+    applyTideEffects(game);
+
+    const tideDesc = getTideDescription(game.tide.level);
+    const dirText = game.tide.direction === 'rising' ? '涨潮' : '退潮';
+    game.message = `🌊 潮汐变化！水位: ${tideDesc}(${game.tide.level}/${game.tide.maxLevel})，${dirText}中`;
+
+    if (game.tide.level <= 1) {
+      const hasPassages = game.room.hiddenPassages.some(
+        (hp) => hp.revealAtLevel >= game.tide.level
+      );
+      if (hasPassages) {
+        game.message += ' | 🔑 低水位，暗道可能已露出！';
+      }
+    }
+    if (game.tide.level >= 3) {
+      game.message += ' | 🔥 高水位，火把效果减弱！';
+    }
+  }
+}
+
+function applyTideEffects(game: GameState) {
+  const tideLevel = game.tide ? game.tide.level : 0;
+
+  for (let y = 0; y < game.room.height; y++) {
+    for (let x = 0; x < game.room.width; x++) {
+      const tile = game.room.tiles[y][x];
+      if (tile.floodLevel !== undefined) {
+        tile.floodLevel = tideLevel;
+      }
+    }
+  }
 }

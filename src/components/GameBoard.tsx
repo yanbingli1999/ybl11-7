@@ -1,5 +1,5 @@
 import React from 'react';
-import { GameState } from '../types/game';
+import { GameState, TideState, HiddenPassage } from '../types/game';
 
 interface GameBoardProps {
   game: GameState;
@@ -19,7 +19,29 @@ const tileIcons: Record<string, string> = {
   relic: '💎',
   torch: '🔥',
   chest: '📦',
+  hiddenPassage: '🕳️',
+  floodable: '',
 };
+
+const tideLevelIcons: Record<number, string> = {
+  0: '',
+  1: '💧',
+  2: '🌊',
+  3: '🌊',
+  4: '🌊',
+};
+
+const tideLevelBgColors: Record<number, string> = {
+  0: '#5a5a7a',
+  1: '#4a6a8a',
+  2: '#3a5a9a',
+  3: '#2a4aaa',
+  4: '#1a3abb',
+};
+
+function isPassageRevealed(hp: HiddenPassage | undefined, tide: TideState): boolean {
+  return !!(hp && tide.level <= hp.revealAtLevel);
+}
 
 export const GameBoard: React.FC<GameBoardProps> = ({ game }) => {
   const { room, player } = game;
@@ -53,6 +75,11 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game }) => {
       case 'floor':
         bgColor = tile.lit ? '#5a5a7a' : '#3d3d5c';
         break;
+      case 'floodable':
+        bgColor = tile.lit
+          ? (tideLevelBgColors[tile.floodLevel] || '#5a5a7a')
+          : '#3d3d5c';
+        break;
       case 'entrance':
         bgColor = '#2d5a2d';
         break;
@@ -64,6 +91,9 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game }) => {
         break;
       case 'pressurePlate':
         bgColor = tile.activated ? '#4a7a4a' : '#5a5a5a';
+        break;
+      case 'hiddenPassage':
+        bgColor = '#6a5a3a';
         break;
       default:
         bgColor = tile.lit ? '#5a5a7a' : '#3d3d5c';
@@ -83,10 +113,33 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game }) => {
       return null;
     }
 
+    if (tile.type === 'hiddenPassage') {
+      const passage = room.hiddenPassages.find(
+        (hp) => hp.position.x === x && hp.position.y === y
+      );
+      if (isPassageRevealed(passage, game.tide)) {
+        return <span style={{ fontSize: '16px', opacity: 0.9 }}>🕳️</span>;
+      }
+      if (tile.visible) {
+        return '🧱';
+      }
+      return null;
+    }
+
+    if (tile.type === 'floodable' && tile.visible) {
+      const floodLevel = tile.floodLevel || 0;
+      if (floodLevel > 0) {
+        return <span style={{ fontSize: floodLevel >= 3 ? '18px' : '14px' }}>{tideLevelIcons[floodLevel]}</span>;
+      }
+    }
+
     const trap = room.traps.find(
       (t) => t.position.x === x && t.position.y === y && t.visible
     );
     if (trap && tile.visible) {
+      if (tile.floodLevel !== undefined && tile.floodLevel! >= 2) {
+        return <span style={{ fontSize: '12px', opacity: 0.5 }}>⚠️🌊</span>;
+      }
       return trap.triggered ? '💥' : '⚠️';
     }
 
@@ -122,6 +175,53 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game }) => {
         borderRadius: '8px',
       }}
     >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '4px',
+          marginBottom: '12px',
+          padding: '8px 16px',
+          backgroundColor: '#252540',
+          borderRadius: '6px',
+        }}
+      >
+        <span style={{ fontSize: '14px', color: '#88aaff' }}>🌊 潮汐</span>
+        {Array.from({ length: game.tide.maxLevel + 1 }, (_, i) => (
+          <div
+            key={i}
+            style={{
+              width: '24px',
+              height: '16px',
+              borderRadius: '3px',
+              backgroundColor: i <= game.tide.level ? '#4488cc' : '#2d2d44',
+              border: i === game.tide.level ? '2px solid #88ccff' : '1px solid #3d3d5c',
+              transition: 'all 0.3s ease',
+              position: 'relative',
+            }}
+          >
+            <span
+              style={{
+                position: 'absolute',
+                top: '-14px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                fontSize: '9px',
+                color: i === game.tide.level ? '#88ccff' : '#666',
+              }}
+            >
+              {i}
+            </span>
+          </div>
+        ))}
+        <span style={{ fontSize: '12px', color: '#aaa', marginLeft: '8px' }}>
+          {game.tide.direction === 'rising' ? '🔺涨潮' : '🔻退潮'}
+        </span>
+        <span style={{ fontSize: '11px', color: '#888', marginLeft: '4px' }}>
+          ({game.tide.turnsPerChange - game.tide.turnsSinceLastChange}回合后变化)
+        </span>
+      </div>
+
       <div
         style={{
           display: 'grid',
