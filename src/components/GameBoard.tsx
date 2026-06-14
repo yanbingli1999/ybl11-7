@@ -137,7 +137,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({ game }) => {
       (t) => t.position.x === x && t.position.y === y && t.visible
     );
     if (trap && tile.visible) {
-      if (tile.floodLevel !== undefined && tile.floodLevel! >= 2) {
+      if (game.tide && game.tide.level >= 2) {
         return <span style={{ fontSize: '12px', opacity: 0.5 }}>⚠️🌊</span>;
       }
       return trap.triggered ? '💥' : '⚠️';

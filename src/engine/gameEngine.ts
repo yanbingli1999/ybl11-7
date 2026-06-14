@@ -333,9 +333,8 @@ function openLinkedDoor(game: GameState, doorId: string) {
 
 function checkTrap(game: GameState) {
   const { x, y } = game.player.position;
-  const tile = game.room.tiles[y][x];
 
-  if (tile.floodLevel !== undefined && tile.floodLevel! >= 2) {
+  if (game.tide && game.tide.level >= 2) {
     return;
   }
 
@@ -733,15 +732,27 @@ export function rest(game: GameState): GameState {
   );
   newGame.turn += 3;
 
+  const tideMessages: string[] = [];
   for (let i = 0; i < 3; i++) {
+    const prevMessage = newGame.message;
     processTide(newGame);
+    if (newGame.message !== prevMessage && newGame.message.startsWith('🌊')) {
+      tideMessages.push(newGame.message);
+    }
   }
 
+  let baseMessage: string;
   if (Math.random() < 0.1) {
     newGame.player.curse += 5;
-    newGame.message = '休息时感到一股寒意...诅咒增加了5点。';
+    baseMessage = '休息时感到一股寒意...诅咒增加了5点。';
   } else {
-    newGame.message = '休息片刻，恢复了20点体力。';
+    baseMessage = '休息片刻，恢复了20点体力。';
+  }
+
+  if (tideMessages.length > 0) {
+    newGame.message = baseMessage + ' | ' + tideMessages.join(' | ');
+  } else {
+    newGame.message = baseMessage;
   }
 
   updateVisibility(newGame);

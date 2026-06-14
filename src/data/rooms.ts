@@ -158,19 +158,44 @@ export function generateRoomTemplate(depth: number): RoomTemplate {
 
   const hiddenPassages: HiddenPassage[] = [];
   const passageCount = 1 + Math.floor(Math.random() * 2);
+  const walkable: TileType[] = ['floor', 'floodable', 'entrance', 'exit', 'relic', 'pressurePlate', 'trap'];
+
   for (let i = 0; i < passageCount; i++) {
-    const x = 1 + Math.floor(Math.random() * (width - 2));
-    const y = 1 + Math.floor(Math.random() * (height - 2));
-    if (
-      tiles[y][x] === 'wall' &&
-      !(x === entrance.x && y === entrance.y) &&
-      !(x === exit.x && y === exit.y)
-    ) {
-      tiles[y][x] = 'hiddenPassage';
-      hiddenPassages.push({
-        position: { x, y },
-        revealAtLevel: Math.floor(Math.random() * 2),
-      });
+    let placed = false;
+    for (let attempt = 0; attempt < 80 && !placed; attempt++) {
+      const x = 1 + Math.floor(Math.random() * (width - 2));
+      const y = 1 + Math.floor(Math.random() * (height - 2));
+      if (
+        tiles[y][x] !== 'wall' ||
+        (x === entrance.x && y === entrance.y) ||
+        (x === exit.x && y === exit.y)
+      ) {
+        continue;
+      }
+
+      const pairs = [
+        { a: { x: x - 1, y }, b: { x: x + 1, y } },
+        { a: { x, y: y - 1 }, b: { x, y: y + 1 } },
+      ];
+
+      for (const pair of pairs) {
+        const aInBounds = pair.a.x >= 0 && pair.a.x < width && pair.a.y >= 0 && pair.a.y < height;
+        const bInBounds = pair.b.x >= 0 && pair.b.x < width && pair.b.y >= 0 && pair.b.y < height;
+        if (!aInBounds || !bInBounds) continue;
+
+        const aWalkable = walkable.includes(tiles[pair.a.y][pair.a.x]);
+        const bWalkable = walkable.includes(tiles[pair.b.y][pair.b.x]);
+
+        if (aWalkable && bWalkable) {
+          tiles[y][x] = 'hiddenPassage';
+          hiddenPassages.push({
+            position: { x, y },
+            revealAtLevel: Math.floor(Math.random() * 2),
+          });
+          placed = true;
+          break;
+        }
+      }
     }
   }
 
